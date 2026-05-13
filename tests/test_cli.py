@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from classroom_repos.cli import app
 
-
 runner = CliRunner()
 
 
@@ -22,8 +21,8 @@ def test_init_creates_commented_starter_config(tmp_path: Path) -> None:
         assert "# Put this file in the directory that contains all student repository directories." in content
         assert "managed_files:" in content
         assert "checked_files:" in content
-        assert '  - path: .github/classroom/autograding.json' in content
-        assert '  - .github/classroom/autograding.json' not in content
+        assert "  - path: .github/classroom/autograding.json" in content
+        assert "  - .github/classroom/autograding.json" not in content
         assert "## Grading Information:" in content
         assert "^test-all:" in content
 
@@ -74,7 +73,7 @@ managed_files:
 
 def init_repo(path: Path) -> None:
     path.mkdir(parents=True)
-    subprocess.run(["git", "init"], cwd=path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
 
 
 def write(path: Path, content: str) -> None:

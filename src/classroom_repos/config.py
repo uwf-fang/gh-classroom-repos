@@ -6,7 +6,6 @@ from typing import Any
 
 import yaml
 
-
 DEFAULT_CONFIG = "classroom-repos.yml"
 
 

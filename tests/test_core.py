@@ -120,12 +120,12 @@ def make_config(tmp_path: Path) -> Config:
 
 def init_repo(path: Path) -> Path:
     path.mkdir(parents=True)
-    subprocess.run(["git", "init"], cwd=path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
     return path
 
 
 def commit_all(repo: Path) -> None:
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         [
             "git",
@@ -139,8 +139,7 @@ def commit_all(repo: Path) -> None:
         ],
         cwd=repo,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
 

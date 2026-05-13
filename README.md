@@ -28,7 +28,15 @@ classroom-repos update --apply
 
 ```bash
 uv run --extra dev pytest
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
 uv run classroom-repos --help
+```
+
+To format code locally:
+
+```bash
+uv run --extra dev ruff format .
 ```
 
 ## Configuration

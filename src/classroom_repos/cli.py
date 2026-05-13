@@ -10,7 +10,6 @@ from .config import DEFAULT_CONFIG, load_config
 from .core import check_repositories, discover_repositories, update_repositories
 from .starter import STARTER_CONFIG
 
-
 app = typer.Typer(help="Manage shared files across local GitHub Classroom repositories.")
 
 

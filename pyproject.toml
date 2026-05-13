@@ -18,6 +18,7 @@ Issues = "https://github.com/uwf-fang/gh-classroom-repos/issues"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.14",
 ]
 
 [project.scripts]
@@ -33,3 +34,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
