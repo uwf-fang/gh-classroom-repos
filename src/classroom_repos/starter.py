@@ -1,0 +1,48 @@
+STARTER_CONFIG = """# classroom-repos configuration
+# Put this file in the directory that contains all student repository directories.
+# When repo_roots is omitted, classroom-repos scans the current working directory.
+#
+# Typical use:
+#   cd /path/to/cloned/classroom/repos
+#   classroom-repos check
+#   classroom-repos update
+#   classroom-repos update --apply
+#
+# Uncomment repo_roots only if you want this config file to always scan a
+# specific directory instead of the current working directory.
+#
+# repo_roots:
+#   - /path/to/cloned/classroom/repos
+
+# Canonical shared files are copied from this directory during update --apply.
+# Paths are resolved relative to this config file.
+template_root: ./templates
+
+# Managed files must be byte-for-byte identical in every repository.
+# The same relative paths must exist under template_root.
+managed_files:
+  - .gitignore
+  - .gitattributes
+  - .github/workflows/classroom.yml
+
+# Checked files vary by assignment but should still exist and contain expected
+# sections, targets, or test drivers. These are checked but never overwritten.
+checked_files:
+  - path: .github/classroom/autograding.json
+    required_patterns:
+      - '"tests"'
+  - path: README.md
+    required_patterns:
+      - "## Grading Information:"
+      - "## Submission Requirements:"
+      - "## Project Requirements:"
+  - path: Makefile
+    required_patterns:
+      - "^main:"
+      - "^test-all:"
+      - "^test-mem:"
+  - path: test
+    kind: directory
+    required_globs:
+      - "*.cpp"
+"""
