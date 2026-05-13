@@ -4,10 +4,16 @@ version = "0.1.1"
 description = "Manage shared files across local GitHub Classroom repositories."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = [
     "pyyaml>=6.0",
     "typer>=0.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/uwf-fang/gh-classroom-repos"
+Repository = "https://github.com/uwf-fang/gh-classroom-repos"
+Issues = "https://github.com/uwf-fang/gh-classroom-repos/issues"
 
 [project.optional-dependencies]
 dev = [

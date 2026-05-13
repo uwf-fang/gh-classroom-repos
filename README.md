@@ -3,6 +3,8 @@
 `classroom-repos` is a local-first CLI for checking and updating shared files
 across cloned GitHub Classroom programming-project repositories.
 
+Repository: <https://github.com/uwf-fang/gh-classroom-repos>
+
 ## Install
 
 Install it as a command with `uv`:
