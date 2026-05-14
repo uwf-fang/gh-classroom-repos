@@ -14,19 +14,17 @@ uv tool install .
 ```
 
 After installation, run it from the directory that contains the student
-repository directories:
+repository directories. A typical first pass is:
 
 ```bash
 cd /path/to/cloned/classroom/repos
 classroom-repos init
 classroom-repos check
-classroom-repos update
-classroom-repos update --apply
 classroom-repos pair-check
-classroom-repos pair-init --apply
-classroom-repos pair-update
 classroom-repos git-status
 ```
+
+See [Commands](#commands) for the full command list.
 
 ## Install for development
 
