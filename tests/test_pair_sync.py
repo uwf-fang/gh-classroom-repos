@@ -186,13 +186,39 @@ def test_pair_init_refuses_missing_provided_file(tmp_path: Path) -> None:
     assert not (provided / ".classroom-repos-sync.json").exists()
 
 
-def make_config(tmp_path: Path) -> Config:
+def test_pair_check_reports_marker_entry_removed_from_sync_scope(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    provided, _solution = make_synced_pair(tmp_path, config)
+    config_without_tests = make_config(tmp_path, paths=("README.md", "Makefile"))
+
+    result = check_pair(config_without_tests, discover_pairs(config_without_tests)[0])
+
+    assert result.status == "removed_from_sync_scope"
+    assert any(issue.status == "removed_from_sync_scope" and issue.path == "test/test.cpp" for issue in result.issues)
+    assert (provided / "test/test.cpp").exists()
+
+
+def test_pair_init_reset_marker_drops_entries_not_in_current_config(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    provided, _solution = make_synced_pair(tmp_path, config)
+    config_without_tests = make_config(tmp_path, paths=("README.md", "Makefile"))
+
+    result = init_pair(config_without_tests, discover_pairs(config_without_tests)[0], apply=True, reset_marker=True)
+
+    marker = json.loads((provided / ".classroom-repos-sync.json").read_text(encoding="utf-8"))
+    assert result.marker_written
+    assert any(action.status == "removed_from_marker" and action.path == "test/test.cpp" for action in result.actions)
+    assert "test/test.cpp" not in marker["files"]
+    assert (provided / "test/test.cpp").exists()
+
+
+def make_config(tmp_path: Path, paths: tuple[str, ...] = ("README.md", "Makefile", "test/**")) -> Config:
     return Config(
         path=tmp_path / "classroom-repos.yml",
         repo_roots=(tmp_path,),
         template_root=tmp_path / "templates",
         managed_files=(".gitignore",),
-        pair_sync=PairSyncConfig(paths=("README.md", "Makefile", "test/**")),
+        pair_sync=PairSyncConfig(paths=paths),
     )
 
 

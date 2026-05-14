@@ -128,6 +128,18 @@ classroom-repos pair-init
 classroom-repos pair-init --pair dsa1-proj-password-manager --apply
 ```
 
+If `pair_sync.paths` changes, reset markers to the current configuration without
+copying or deleting files:
+
+```bash
+classroom-repos pair-init --reset-marker
+classroom-repos pair-init --reset-marker --apply
+```
+
+This is useful after removing a path such as `test/**` from `pair_sync.paths`.
+The command rewrites `.classroom-repos-sync.json` so old marker entries are
+dropped, but it leaves the actual files in the repositories untouched.
+
 Dry-run a forward update from solution repos to provided repos:
 
 ```bash
@@ -210,6 +222,7 @@ classroom-repos pair-check
 classroom-repos pair-check --json
 classroom-repos pair-init
 classroom-repos pair-init --apply
+classroom-repos pair-init --reset-marker --apply
 classroom-repos pair-update
 classroom-repos pair-update --apply
 classroom-repos pair-create --solution /path/to/repo-solution --apply

@@ -153,7 +153,9 @@ def check_pair(config: Config, pair: RepoPair) -> PairCheckResult:
 
     all_paths = sorted(set(plan.current_files) | set(marker_hashes))
     for path in all_paths:
-        issues.extend(_classify_path(pair, path, marker_hashes.get(path), path in plan.current_files))
+        issues.extend(
+            _classify_path(pair, path, marker_hashes.get(path), path in plan.current_files, pair_config.paths)
+        )
 
     status = _overall_status(issues)
     return PairCheckResult(pair=pair, status=status, dirty=False, issues=tuple(issues))
@@ -181,12 +183,17 @@ def update_pair(config: Config, pair: RepoPair, apply: bool = False, backward: b
     return _update_forward(pair_config, pair, apply=apply)
 
 
-def init_pairs(config: Config, pair_name: str | None = None, apply: bool = False) -> list[PairInitResult]:
+def init_pairs(
+    config: Config,
+    pair_name: str | None = None,
+    apply: bool = False,
+    reset_marker: bool = False,
+) -> list[PairInitResult]:
     pairs = [find_pair(config, pair_name)] if pair_name else discover_pairs(config)
-    return [init_pair(config, pair, apply=apply) for pair in pairs]
+    return [init_pair(config, pair, apply=apply, reset_marker=reset_marker) for pair in pairs]
 
 
-def init_pair(config: Config, pair: RepoPair, apply: bool = False) -> PairInitResult:
+def init_pair(config: Config, pair: RepoPair, apply: bool = False, reset_marker: bool = False) -> PairInitResult:
     pair_config = require_pair_sync(config)
     skipped = _repo_skip_reason(pair)
     if skipped:
@@ -197,6 +204,7 @@ def init_pair(config: Config, pair: RepoPair, apply: bool = False) -> PairInitRe
         actions = tuple(PairUpdateAction(path, "error", message) for path, message in plan.errors)
         return PairInitResult(pair=pair, actions=actions, skipped_reason="solution is missing configured paths")
 
+    marker_hashes = _marker_hashes(_read_marker(pair.provided / pair_config.marker_file))
     actions: list[PairUpdateAction] = []
     for path in sorted(plan.current_files):
         source_hash = _hash_file(pair.solution / path)
@@ -213,6 +221,10 @@ def init_pair(config: Config, pair: RepoPair, apply: bool = False) -> PairInitRe
                     "differs from solution; recording current provided file as baseline",
                 )
             )
+
+    if reset_marker:
+        for path in sorted(set(marker_hashes) - set(plan.current_files)):
+            actions.append(PairUpdateAction(path, "removed_from_marker", "not matched by current pair_sync.paths"))
 
     if any(action.status == "error" for action in actions):
         return PairInitResult(
@@ -392,6 +404,7 @@ def _classify_path(
     path: str,
     marker_hash: str | None,
     exists_in_solution: bool,
+    current_patterns: tuple[str, ...],
 ) -> list[PairFileStatus]:
     source_hash = _hash_file(pair.solution / path) if exists_in_solution else None
     target_hash = _hash_file(pair.provided / path)
@@ -400,6 +413,10 @@ def _classify_path(
     if marker_hash is None:
         return [PairFileStatus(path, "untracked_by_marker", "File is not recorded in sync marker.")]
     if source_hash is None:
+        if not _matches_any_pattern(path, current_patterns):
+            return [
+                PairFileStatus(path, "removed_from_sync_scope", "File is in marker but not current pair_sync.paths.")
+            ]
         if target_hash is None:
             return [PairFileStatus(path, "deleted_in_solution", "File was removed from solution and provided repo.")]
         return [
@@ -421,6 +438,17 @@ def _classify_path(
     return [PairFileStatus(path, "missing_in_provided", "Provided repo is missing a synced file.")]
 
 
+def _matches_any_pattern(path: str, patterns: tuple[str, ...]) -> bool:
+    return any(_matches_pattern(path, pattern) for pattern in patterns)
+
+
+def _matches_pattern(path: str, pattern: str) -> bool:
+    normalized = Path(pattern).as_posix()
+    if normalized.endswith("/**"):
+        return path.startswith(normalized[:-2])
+    return path == normalized or fnmatch.fnmatch(path, normalized)
+
+
 def _overall_status(issues: list[PairFileStatus]) -> str:
     if not issues:
         return "ok"
@@ -429,9 +457,10 @@ def _overall_status(issues: list[PairFileStatus]) -> str:
         "missing_in_solution",
         "provided_newer",
         "needs_forward_sync",
-        "deleted_in_solution",
+        "removed_from_sync_scope",
         "untracked_by_marker",
         "marker_stale",
+        "deleted_in_solution",
         "missing_in_provided",
     ]
     statuses = {issue.status for issue in issues}

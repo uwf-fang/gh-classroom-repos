@@ -149,11 +149,15 @@ def pair_init(
     config: ConfigOption = Path(DEFAULT_CONFIG),
     pair: Annotated[str | None, typer.Option("--pair", help="Only initialize one provided repository pair.")] = None,
     apply: Annotated[bool, typer.Option("--apply", help="Write sync marker files.")] = False,
+    reset_marker: Annotated[
+        bool,
+        typer.Option("--reset-marker", help="Drop marker entries not matched by current pair_sync.paths."),
+    ] = False,
 ) -> None:
     """Initialize pair sync markers without copying files."""
     cfg = _load_or_exit(config)
     try:
-        results = init_pairs(cfg, pair_name=pair, apply=apply)
+        results = init_pairs(cfg, pair_name=pair, apply=apply, reset_marker=reset_marker)
     except Exception as exc:
         typer.secho(f"Pair init error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(2) from exc
