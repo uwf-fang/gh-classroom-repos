@@ -77,8 +77,33 @@ def test_cli_help_lists_batch_operation_commands() -> None:
     assert "run" in result.output
     assert "git-status" in result.output
     assert "git-commit" in result.output
+    assert "clean" in result.output
     assert "pair-init" in result.output
     assert "pair-status" in result.output
+
+
+def test_run_summary_outputs_exit_code_table(tmp_path: Path) -> None:
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        write(
+            Path("classroom-repos.yml"),
+            """
+managed_files:
+  - .gitignore
+""",
+        )
+        repo = Path("repo")
+        init_repo(repo)
+
+        result = runner.invoke(
+            app,
+            ["run", "--summary", "--apply", "--repo", "repo", "--", "sh", "-c", "echo command-output"],
+        )
+
+        assert result.exit_code == 0
+        assert "repo" in result.output
+        assert "exit" in result.output
+        assert "0" in result.output
+        assert result.output.count("command-output") == 1
 
 
 def init_repo(path: Path) -> None:

@@ -4,7 +4,14 @@ import subprocess
 from pathlib import Path
 
 from classroom_repos.config import Config, PairSyncConfig
-from classroom_repos.ops import commit_repositories, git_status, pair_summaries, run_command, select_repositories
+from classroom_repos.ops import (
+    clean_repositories,
+    commit_repositories,
+    git_status,
+    pair_summaries,
+    run_command,
+    select_repositories,
+)
 from classroom_repos.pair_sync import discover_pairs, update_pair
 
 
@@ -84,6 +91,66 @@ def test_pair_summaries_compacts_pair_check_status(tmp_path: Path) -> None:
     update_pair(config, discover_pairs(config)[0], apply=True)
     commit_all(provided)
     assert pair_summaries(config)[0].status == "ok"
+
+
+def test_clean_repositories_dry_run_does_not_remove_artifacts(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    repo = init_repo(tmp_path / "repo")
+    write(repo / ".DS_Store", "finder\n")
+    write(repo / "main.o", "object\n")
+    write(repo / "__pycache__/module.pyc", "cache\n")
+
+    results = clean_repositories(config, scope="all", pair_name=None, repo=None, apply=False)
+
+    assert {result.path for result in results if result.status == "would_remove"} == {
+        ".DS_Store",
+        "__pycache__",
+        "main.o",
+    }
+    assert (repo / ".DS_Store").exists()
+    assert (repo / "main.o").exists()
+    assert (repo / "__pycache__/module.pyc").exists()
+
+
+def test_clean_repositories_apply_removes_untracked_artifacts(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    repo = init_repo(tmp_path / "repo")
+    write(repo / ".DS_Store", "finder\n")
+    write(repo / "build/output.o", "object\n")
+
+    results = clean_repositories(config, scope="all", pair_name=None, repo=None, apply=True)
+
+    assert any(result.status == "removed" and result.path == ".DS_Store" for result in results)
+    assert any(result.status == "removed" and result.path == "build" for result in results)
+    assert not (repo / ".DS_Store").exists()
+    assert not (repo / "build").exists()
+
+
+def test_clean_repositories_skips_tracked_artifacts(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    repo = init_repo(tmp_path / "repo")
+    write(repo / ".DS_Store", "tracked for some reason\n")
+    subprocess.run(["git", "add", "-f", ".DS_Store"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "track ds store",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+    results = clean_repositories(config, scope="all", pair_name=None, repo=None, apply=True)
+
+    assert results[0].status == "skipped_tracked"
+    assert (repo / ".DS_Store").exists()
 
 
 def make_config(tmp_path: Path) -> Config:

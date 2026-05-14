@@ -189,6 +189,14 @@ classroom-repos git-status
 classroom-repos git-status --scope solution
 ```
 
+Remove common OS and build artifacts. This is a dry run unless `--apply` is
+used:
+
+```bash
+classroom-repos clean
+classroom-repos clean --scope solution --apply
+```
+
 Commit all changes in selected repositories:
 
 ```bash
@@ -199,6 +207,7 @@ Run a command across repositories. This is a dry run unless `--apply` is used:
 
 ```bash
 classroom-repos run -- make test-all
+classroom-repos run --summary --apply -- make test-all
 classroom-repos run --scope solution --apply -- make test-all
 classroom-repos run --scope pair --pair dsa1-proj-password-manager --apply -- make test-mem
 ```
@@ -226,6 +235,8 @@ classroom-repos pair-update --apply
 classroom-repos pair-create --solution /path/to/repo-solution --apply
 classroom-repos pair-status
 classroom-repos git-status
+classroom-repos clean
+classroom-repos clean --apply
 classroom-repos git-commit --message "Message"
 classroom-repos run --apply -- make test-all
 ```

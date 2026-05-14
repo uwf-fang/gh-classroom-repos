@@ -8,7 +8,7 @@ import typer
 
 from .config import DEFAULT_CONFIG, load_config
 from .core import check_repositories, discover_repositories, update_repositories
-from .ops import commit_repositories, git_statuses, pair_summaries, run_command
+from .ops import clean_repositories, commit_repositories, git_statuses, pair_summaries, run_command
 from .pair_sync import check_pairs, confirm_backward, create_pair, init_pairs, update_pairs
 from .starter import STARTER_CONFIG
 
@@ -196,6 +196,7 @@ def run(
     pair: Annotated[str | None, typer.Option("--pair", help="Pair name for pair/provided/solution scopes.")] = None,
     repo: Annotated[Path | None, typer.Option("--repo", help="Only run in one repository.")] = None,
     apply: Annotated[bool, typer.Option("--apply", help="Execute the command.")] = False,
+    summary: Annotated[bool, typer.Option("--summary", help="Only show a per-repo exit-code table.")] = False,
 ) -> None:
     """Run a command across selected repositories. Dry-run unless --apply is provided."""
     cfg = _load_or_exit(config)
@@ -205,7 +206,7 @@ def run(
         typer.secho(f"Run error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(2) from exc
 
-    _print_run_results(results, apply=apply)
+    _print_run_results(results, apply=apply, summary=summary)
     if any(result.returncode not in {None, 0} for result in results):
         raise typer.Exit(1)
 
@@ -275,6 +276,25 @@ def pair_status(
         _print_pair_status(results)
     if any(not result.ok for result in results):
         raise typer.Exit(1)
+
+
+@app.command()
+def clean(
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    scope: Annotated[str, typer.Option("--scope", help="Repo scope: all, provided, solution, or pair.")] = "all",
+    pair: Annotated[str | None, typer.Option("--pair", help="Pair name for pair/provided/solution scopes.")] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Only clean one repository.")] = None,
+    apply: Annotated[bool, typer.Option("--apply", help="Remove matching redundant files.")] = False,
+) -> None:
+    """Remove common OS and build artifacts. Dry-run unless --apply is provided."""
+    cfg = _load_or_exit(config)
+    try:
+        results = clean_repositories(cfg, scope=scope, pair_name=pair, repo=repo, apply=apply)
+    except Exception as exc:
+        typer.secho(f"Clean error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    _print_clean_results(results, apply=apply)
 
 
 def _load_or_exit(config: Path):
@@ -418,9 +438,17 @@ def _pair_check_payload(results) -> dict:
     }
 
 
-def _print_run_results(results, apply: bool) -> None:
+def _print_run_results(results, apply: bool, summary: bool = False) -> None:
     mode = "apply" if apply else "dry-run"
     typer.echo(f"Run mode: {mode}")
+    if summary:
+        typer.echo(f"{'repo':40} {'status':12} {'exit':>4} command")
+        for result in results:
+            command = " ".join(result.command)
+            exit_code = "-" if result.returncode is None else str(result.returncode)
+            typer.echo(f"{result.repo.name:40} {result.status:12} {exit_code:>4} {command}")
+        return
+
     for result in results:
         command = " ".join(result.command)
         if result.status == "would_run":
@@ -498,3 +526,13 @@ def _pair_status_payload(results) -> dict:
             for result in results
         ]
     }
+
+
+def _print_clean_results(results, apply: bool) -> None:
+    mode = "apply" if apply else "dry-run"
+    typer.echo(f"Clean mode: {mode}")
+    for result in results:
+        if result.status == "clean":
+            typer.echo(f"CLEAN {result.repo.name}: {result.message}")
+            continue
+        typer.echo(f"{result.status.upper()} {result.repo.name}/{result.path}: {result.message}")

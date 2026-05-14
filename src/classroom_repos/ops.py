@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +58,41 @@ class PairSummary:
     @property
     def ok(self) -> bool:
         return self.status == "ok"
+
+
+DEFAULT_CLEAN_PATTERNS: tuple[str, ...] = (
+    ".DS_Store",
+    "._*",
+    "Thumbs.db",
+    "desktop.ini",
+    "__pycache__/",
+    "*.py[cod]",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    "*.o",
+    "*.obj",
+    "*.class",
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.exe",
+    "a.out",
+    "*.out",
+    "CMakeFiles/",
+    "CMakeCache.txt",
+    "cmake_install.cmake",
+    "build/",
+    "target/",
+)
+
+
+@dataclass(frozen=True)
+class CleanAction:
+    repo: Path
+    path: str
+    status: str
+    message: str
 
 
 def select_repositories(
@@ -234,6 +270,103 @@ def pair_summaries(config: Config) -> list[PairSummary]:
             )
         )
     return summaries
+
+
+def clean_repositories(
+    config: Config,
+    scope: str,
+    pair_name: str | None,
+    repo: Path | None,
+    apply: bool,
+    patterns: tuple[str, ...] = DEFAULT_CLEAN_PATTERNS,
+) -> list[CleanAction]:
+    actions: list[CleanAction] = []
+    for target in select_repositories(config, scope=scope, pair_name=pair_name, repo=repo):
+        matches = _find_clean_matches(target, patterns)
+        if not matches:
+            actions.append(CleanAction(repo=target, path=".", status="clean", message="no matching redundant files"))
+            continue
+        for path in matches:
+            relative = path.relative_to(target).as_posix()
+            if _is_tracked(target, relative) or (path.is_dir() and _contains_tracked_files(target, relative)):
+                actions.append(
+                    CleanAction(repo=target, path=relative, status="skipped_tracked", message="tracked by Git")
+                )
+                continue
+            if apply:
+                _remove_path(path)
+            actions.append(
+                CleanAction(
+                    repo=target,
+                    path=relative,
+                    status="removed" if apply else "would_remove",
+                    message="matched cleanup pattern",
+                )
+            )
+    return actions
+
+
+def _find_clean_matches(repo: Path, patterns: tuple[str, ...]) -> list[Path]:
+    matches: set[Path] = set()
+    for pattern in patterns:
+        normalized = pattern.rstrip("/")
+        for path in repo.rglob(normalized):
+            if ".git" in path.relative_to(repo).parts:
+                continue
+            if _pattern_matches_path(repo, path, pattern):
+                matches.add(path)
+    return _without_nested_matches(repo, sorted(matches, key=lambda path: path.relative_to(repo).as_posix()))
+
+
+def _pattern_matches_path(repo: Path, path: Path, pattern: str) -> bool:
+    relative = path.relative_to(repo).as_posix()
+    if pattern.endswith("/"):
+        return path.is_dir() and (path.name == pattern.rstrip("/") or relative == pattern.rstrip("/"))
+    return path.is_file() and (path.name == pattern or path.match(pattern))
+
+
+def _is_tracked(repo: Path, relative: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", relative],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _contains_tracked_files(repo: Path, relative: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "--", relative],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    return bool(result.stdout.strip())
+
+
+def _without_nested_matches(repo: Path, matches: list[Path]) -> list[Path]:
+    filtered: list[Path] = []
+    for path in matches:
+        if any(_is_relative_to(path, parent) for parent in filtered if parent.is_dir()):
+            continue
+        filtered.append(path)
+    return filtered
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return path != parent
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
 
 
 def _parse_branch_line(line: str) -> tuple[str | None, str | None, int, int, str]:
