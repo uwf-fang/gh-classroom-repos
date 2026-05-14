@@ -291,6 +291,12 @@ def _build_file_plan(pair_config: PairSyncConfig, source: Path, target: Path) ->
 
 
 def _expand_pattern(root: Path, pattern: str) -> list[str]:
+    if pattern.endswith("/**"):
+        base = root / pattern[:-3]
+        if base.is_dir():
+            return sorted(path.relative_to(root).as_posix() for path in base.rglob("*") if path.is_file())
+        return []
+
     if any(char in pattern for char in "*?["):
         return sorted(path.relative_to(root).as_posix() for path in root.glob(pattern) if path.is_file())
 

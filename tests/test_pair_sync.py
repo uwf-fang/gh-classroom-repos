@@ -218,6 +218,7 @@ def make_synced_pair(tmp_path: Path, config: Config) -> tuple[Path, Path]:
 def init_repo(path: Path) -> Path:
     path.mkdir(parents=True)
     subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
+    configure_git_user(path)
     return path
 
 
@@ -239,6 +240,11 @@ def commit_all(repo: Path) -> None:
         check=True,
         capture_output=True,
     )
+
+
+def configure_git_user(repo: Path) -> None:
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True, capture_output=True)
 
 
 def write(path: Path, content: str) -> None:
