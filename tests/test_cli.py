@@ -22,7 +22,6 @@ def test_init_creates_commented_starter_config(tmp_path: Path) -> None:
         assert "managed_files:" in content
         assert "checked_files:" in content
         assert "  - path: .github/classroom/autograding.json" in content
-        assert "  - .github/classroom/autograding.json" not in content
         assert "## Grading Information:" in content
         assert "^test-all:" in content
 

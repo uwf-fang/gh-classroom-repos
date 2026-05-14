@@ -18,12 +18,20 @@ class CheckedFileRule:
 
 
 @dataclass(frozen=True)
+class PairSyncConfig:
+    solution_suffix: str = "-solution"
+    marker_file: str = ".classroom-repos-sync.json"
+    paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Config:
     path: Path
     repo_roots: tuple[Path, ...]
     template_root: Path
     managed_files: tuple[str, ...]
     checked_files: tuple[CheckedFileRule, ...] = field(default_factory=tuple)
+    pair_sync: PairSyncConfig | None = None
 
 
 def load_config(config_path: Path, default_repo_root: Path | None = None) -> Config:
@@ -43,6 +51,7 @@ def load_config(config_path: Path, default_repo_root: Path | None = None) -> Con
 
     checked_files_raw = _optional_list_with_alias(raw, "checked_files", "similar_files")
     checked_files = tuple(_parse_checked_rule(item) for item in checked_files_raw)
+    pair_sync = _parse_pair_sync(raw.get("pair_sync"))
 
     return Config(
         path=config_path,
@@ -50,6 +59,7 @@ def load_config(config_path: Path, default_repo_root: Path | None = None) -> Con
         template_root=template_root,
         managed_files=tuple(str(item) for item in managed_files),
         checked_files=checked_files,
+        pair_sync=pair_sync,
     )
 
 
@@ -98,6 +108,31 @@ def _parse_checked_rule(item: Any) -> CheckedFileRule:
         kind=kind,
         required_patterns=tuple(str(pattern) for pattern in item.get("required_patterns", [])),
         required_globs=tuple(str(pattern) for pattern in item.get("required_globs", [])),
+    )
+
+
+def _parse_pair_sync(value: Any) -> PairSyncConfig | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("Config key 'pair_sync' must be a mapping when provided.")
+
+    paths = value.get("paths", [])
+    if not isinstance(paths, list) or not paths:
+        raise ValueError("Config key 'pair_sync.paths' must be a non-empty list.")
+
+    solution_suffix = str(value.get("solution_suffix", "-solution"))
+    if not solution_suffix:
+        raise ValueError("Config key 'pair_sync.solution_suffix' must not be empty.")
+
+    marker_file = str(value.get("marker_file", ".classroom-repos-sync.json"))
+    if not marker_file or Path(marker_file).is_absolute() or ".." in Path(marker_file).parts:
+        raise ValueError("Config key 'pair_sync.marker_file' must be a relative path inside the provided repo.")
+
+    return PairSyncConfig(
+        solution_suffix=solution_suffix,
+        marker_file=marker_file,
+        paths=tuple(str(path) for path in paths),
     )
 
 
