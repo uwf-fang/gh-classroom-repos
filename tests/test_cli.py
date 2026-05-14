@@ -70,6 +70,17 @@ managed_files:
         assert "student-assignment-1/.gitignore: content_mismatch" in result.output
 
 
+def test_cli_help_lists_batch_operation_commands() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "run" in result.output
+    assert "git-status" in result.output
+    assert "git-commit" in result.output
+    assert "pair-init" in result.output
+    assert "pair-status" in result.output
+
+
 def init_repo(path: Path) -> None:
     path.mkdir(parents=True)
     subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)

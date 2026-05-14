@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from classroom_repos.config import Config, PairSyncConfig
-from classroom_repos.pair_sync import check_pair, create_pair, discover_pairs, update_pair
+from classroom_repos.pair_sync import check_pair, create_pair, discover_pairs, init_pair, update_pair
 
 
 def test_discover_pairs_from_solution_suffix(tmp_path: Path) -> None:
@@ -146,6 +146,44 @@ def test_pair_create_refuses_existing_target(tmp_path: Path) -> None:
     result = create_pair(config, solution=solution, apply=True)
 
     assert result.skipped_reason == "provided repository already exists"
+
+
+def test_pair_init_writes_marker_without_copying_files(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    provided, solution = make_pair(tmp_path)
+    write(solution / "README.md", "solution readme\n")
+    write(solution / "Makefile", "main:\n")
+    write(solution / "test/test.cpp", "assert(true);\n")
+    write(provided / "README.md", "provided readme\n")
+    write(provided / "Makefile", "main:\n")
+    write(provided / "test/test.cpp", "assert(true);\n")
+    commit_all(solution)
+    commit_all(provided)
+
+    result = init_pair(config, discover_pairs(config)[0], apply=True)
+
+    assert result.marker_written
+    assert any(action.status == "recorded_diff" and action.path == "README.md" for action in result.actions)
+    assert (provided / "README.md").read_text(encoding="utf-8") == "provided readme\n"
+    assert json.loads((provided / ".classroom-repos-sync.json").read_text(encoding="utf-8"))["files"]["README.md"]
+
+
+def test_pair_init_refuses_missing_provided_file(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    provided, solution = make_pair(tmp_path)
+    write(solution / "README.md", "solution readme\n")
+    write(solution / "Makefile", "main:\n")
+    write(solution / "test/test.cpp", "assert(true);\n")
+    write(provided / "README.md", "provided readme\n")
+    write(provided / "Makefile", "main:\n")
+    commit_all(solution)
+    commit_all(provided)
+
+    result = init_pair(config, discover_pairs(config)[0], apply=True)
+
+    assert result.skipped_reason == "provided repo is missing configured files"
+    assert any(action.status == "error" and action.path == "test/test.cpp" for action in result.actions)
+    assert not (provided / ".classroom-repos-sync.json").exists()
 
 
 def make_config(tmp_path: Path) -> Config:

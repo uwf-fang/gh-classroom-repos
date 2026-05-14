@@ -67,6 +67,14 @@ class PairCreateResult:
     marker_written: bool = False
 
 
+@dataclass(frozen=True)
+class PairInitResult:
+    pair: RepoPair
+    actions: tuple[PairUpdateAction, ...]
+    skipped_reason: str | None = None
+    marker_written: bool = False
+
+
 def require_pair_sync(config: Config) -> PairSyncConfig:
     if config.pair_sync is None:
         raise ValueError("Config key 'pair_sync' is required for pair commands.")
@@ -171,6 +179,52 @@ def update_pair(config: Config, pair: RepoPair, apply: bool = False, backward: b
     if backward:
         return _update_backward(pair_config, pair, apply=apply)
     return _update_forward(pair_config, pair, apply=apply)
+
+
+def init_pairs(config: Config, pair_name: str | None = None, apply: bool = False) -> list[PairInitResult]:
+    pairs = [find_pair(config, pair_name)] if pair_name else discover_pairs(config)
+    return [init_pair(config, pair, apply=apply) for pair in pairs]
+
+
+def init_pair(config: Config, pair: RepoPair, apply: bool = False) -> PairInitResult:
+    pair_config = require_pair_sync(config)
+    skipped = _repo_skip_reason(pair)
+    if skipped:
+        return PairInitResult(pair=pair, actions=(), skipped_reason=skipped)
+
+    plan = _build_file_plan(pair_config, pair.solution, pair.provided)
+    if plan.errors:
+        actions = tuple(PairUpdateAction(path, "error", message) for path, message in plan.errors)
+        return PairInitResult(pair=pair, actions=actions, skipped_reason="solution is missing configured paths")
+
+    actions: list[PairUpdateAction] = []
+    for path in sorted(plan.current_files):
+        source_hash = _hash_file(pair.solution / path)
+        target_hash = _hash_file(pair.provided / path)
+        if target_hash is None:
+            actions.append(PairUpdateAction(path, "error", "provided repo is missing configured file"))
+        elif target_hash == source_hash:
+            actions.append(PairUpdateAction(path, "recorded" if apply else "would_record", "matches solution"))
+        else:
+            actions.append(
+                PairUpdateAction(
+                    path,
+                    "recorded_diff" if apply else "would_record_diff",
+                    "differs from solution; recording current provided file as baseline",
+                )
+            )
+
+    if any(action.status == "error" for action in actions):
+        return PairInitResult(
+            pair=pair,
+            actions=tuple(actions),
+            skipped_reason="provided repo is missing configured files",
+        )
+
+    if apply:
+        _write_marker(pair_config, pair, sorted(plan.current_files), deleted_files=())
+
+    return PairInitResult(pair=pair, actions=tuple(actions), marker_written=apply)
 
 
 def create_pair(config: Config, solution: Path, apply: bool = False) -> PairCreateResult:

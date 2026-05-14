@@ -8,7 +8,8 @@ import typer
 
 from .config import DEFAULT_CONFIG, load_config
 from .core import check_repositories, discover_repositories, update_repositories
-from .pair_sync import check_pairs, confirm_backward, create_pair, update_pairs
+from .ops import commit_repositories, git_statuses, pair_summaries, run_command
+from .pair_sync import check_pairs, confirm_backward, create_pair, init_pairs, update_pairs
 from .starter import STARTER_CONFIG
 
 app = typer.Typer(help="Manage shared files across local GitHub Classroom repositories.")
@@ -143,6 +144,27 @@ def pair_update(
         raise typer.Exit(1)
 
 
+@app.command("pair-init")
+def pair_init(
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    pair: Annotated[str | None, typer.Option("--pair", help="Only initialize one provided repository pair.")] = None,
+    apply: Annotated[bool, typer.Option("--apply", help="Write sync marker files.")] = False,
+) -> None:
+    """Initialize pair sync markers without copying files."""
+    cfg = _load_or_exit(config)
+    try:
+        results = init_pairs(cfg, pair_name=pair, apply=apply)
+    except Exception as exc:
+        typer.secho(f"Pair init error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    _print_pair_init_results(results, apply=apply)
+    if any(result.skipped_reason for result in results):
+        raise typer.Exit(1)
+    if any(action.status == "error" for result in results for action in result.actions):
+        raise typer.Exit(1)
+
+
 @app.command("pair-create")
 def pair_create(
     solution: Annotated[Path, typer.Option("--solution", help="Solution repository path or directory name.")],
@@ -159,6 +181,95 @@ def pair_create(
 
     _print_pair_create_result(result, apply=apply)
     if result.skipped_reason or any(action.status == "error" for action in result.actions):
+        raise typer.Exit(1)
+
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def run(
+    ctx: typer.Context,
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    scope: Annotated[str, typer.Option("--scope", help="Repo scope: all, provided, solution, or pair.")] = "all",
+    pair: Annotated[str | None, typer.Option("--pair", help="Pair name for pair/provided/solution scopes.")] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Only run in one repository.")] = None,
+    apply: Annotated[bool, typer.Option("--apply", help="Execute the command.")] = False,
+) -> None:
+    """Run a command across selected repositories. Dry-run unless --apply is provided."""
+    cfg = _load_or_exit(config)
+    try:
+        results = run_command(cfg, list(ctx.args), scope=scope, pair_name=pair, repo=repo, apply=apply)
+    except Exception as exc:
+        typer.secho(f"Run error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    _print_run_results(results, apply=apply)
+    if any(result.returncode not in {None, 0} for result in results):
+        raise typer.Exit(1)
+
+
+@app.command("git-status")
+def git_status(
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    scope: Annotated[str, typer.Option("--scope", help="Repo scope: all, provided, solution, or pair.")] = "all",
+    pair: Annotated[str | None, typer.Option("--pair", help="Pair name for pair/provided/solution scopes.")] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Only inspect one repository.")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+) -> None:
+    """Summarize Git state across selected repositories."""
+    cfg = _load_or_exit(config)
+    try:
+        results = git_statuses(cfg, scope=scope, pair_name=pair, repo=repo)
+    except Exception as exc:
+        typer.secho(f"Git status error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    if json_output:
+        typer.echo(json.dumps(_git_status_payload(results), indent=2))
+    else:
+        _print_git_statuses(results)
+
+    if any(not result.ok for result in results):
+        raise typer.Exit(1)
+
+
+@app.command("git-commit")
+def git_commit(
+    message: Annotated[str, typer.Option("--message", "-m", help="Commit message.")],
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    scope: Annotated[str, typer.Option("--scope", help="Repo scope: all, provided, solution, or pair.")] = "all",
+    pair: Annotated[str | None, typer.Option("--pair", help="Pair name for pair/provided/solution scopes.")] = None,
+    repo: Annotated[Path | None, typer.Option("--repo", help="Only commit one repository.")] = None,
+) -> None:
+    """Commit all changes in selected repositories."""
+    cfg = _load_or_exit(config)
+    try:
+        results = commit_repositories(cfg, message=message, scope=scope, pair_name=pair, repo=repo)
+    except Exception as exc:
+        typer.secho(f"Git commit error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    _print_commit_results(results)
+    if any(result.status == "error" for result in results):
+        raise typer.Exit(1)
+
+
+@app.command("pair-status")
+def pair_status(
+    config: ConfigOption = Path(DEFAULT_CONFIG),
+    json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+) -> None:
+    """Show compact pair agreement status."""
+    cfg = _load_or_exit(config)
+    try:
+        results = pair_summaries(cfg)
+    except Exception as exc:
+        typer.secho(f"Pair status error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from exc
+
+    if json_output:
+        typer.echo(json.dumps(_pair_status_payload(results), indent=2))
+    else:
+        _print_pair_status(results)
+    if any(not result.ok for result in results):
         raise typer.Exit(1)
 
 
@@ -266,6 +377,19 @@ def _print_pair_create_result(result, apply: bool) -> None:
         typer.echo("  - marker: written")
 
 
+def _print_pair_init_results(results, apply: bool) -> None:
+    mode = "apply" if apply else "dry-run"
+    typer.echo(f"Pair init mode: {mode}")
+    for result in results:
+        typer.echo(f"PAIR {result.pair.name}")
+        if result.skipped_reason:
+            typer.echo(f"  - skipped: {result.skipped_reason}")
+        for action in result.actions:
+            typer.echo(f"  - {action.path}: {action.status}: {action.message}")
+        if result.marker_written:
+            typer.echo("  - marker: written")
+
+
 def _pair_check_payload(results) -> dict:
     return {
         "pairs": [
@@ -284,6 +408,88 @@ def _pair_check_payload(results) -> dict:
                     }
                     for issue in result.issues
                 ],
+            }
+            for result in results
+        ]
+    }
+
+
+def _print_run_results(results, apply: bool) -> None:
+    mode = "apply" if apply else "dry-run"
+    typer.echo(f"Run mode: {mode}")
+    for result in results:
+        command = " ".join(result.command)
+        if result.status == "would_run":
+            typer.echo(f"WOULD RUN {result.repo.name}: {command}")
+            continue
+        typer.echo(f"RUN {result.repo.name}: exit {result.returncode}: {command}")
+        if result.stdout:
+            typer.echo(result.stdout.rstrip())
+        if result.stderr:
+            typer.echo(result.stderr.rstrip())
+
+
+def _print_git_statuses(results) -> None:
+    if not results:
+        typer.echo("No repositories discovered.")
+        return
+    for result in results:
+        if not result.valid:
+            typer.echo(f"invalid {result.repo.name}: {result.message}")
+            continue
+        state = "clean" if result.ok else "needs_attention"
+        counts = f"staged {result.staged}, modified {result.modified}, untracked {result.untracked}"
+        remote = f"ahead {result.ahead}, behind {result.behind}" if result.upstream else result.message
+        typer.echo(f"{state:15} {result.repo.name:40} {result.branch or '-'}  {counts}  {remote}")
+
+
+def _print_commit_results(results) -> None:
+    for result in results:
+        detail = f" {result.commit_hash}" if result.commit_hash else ""
+        typer.echo(f"{result.status:10} {result.repo.name}{detail}: {result.message}")
+
+
+def _print_pair_status(results) -> None:
+    if not results:
+        typer.echo("No repository pairs discovered.")
+        return
+    for result in results:
+        detail = result.skipped_reason or f"{result.issue_count} files"
+        typer.echo(f"{result.status:20} {result.name:40} {detail}")
+
+
+def _git_status_payload(results) -> dict:
+    return {
+        "repositories": [
+            {
+                "name": result.repo.name,
+                "path": str(result.repo),
+                "valid": result.valid,
+                "branch": result.branch,
+                "upstream": result.upstream,
+                "dirty": result.dirty,
+                "staged": result.staged,
+                "modified": result.modified,
+                "untracked": result.untracked,
+                "ahead": result.ahead,
+                "behind": result.behind,
+                "message": result.message,
+                "ok": result.ok,
+            }
+            for result in results
+        ]
+    }
+
+
+def _pair_status_payload(results) -> dict:
+    return {
+        "pairs": [
+            {
+                "name": result.name,
+                "status": result.status,
+                "issue_count": result.issue_count,
+                "skipped_reason": result.skipped_reason,
+                "ok": result.ok,
             }
             for result in results
         ]

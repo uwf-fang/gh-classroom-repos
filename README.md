@@ -23,7 +23,9 @@ classroom-repos check
 classroom-repos update
 classroom-repos update --apply
 classroom-repos pair-check
+classroom-repos pair-init --apply
 classroom-repos pair-update
+classroom-repos git-status
 ```
 
 ## Install for development
@@ -119,6 +121,13 @@ Check all pairs:
 classroom-repos pair-check
 ```
 
+Initialize marker files for existing pairs without copying files:
+
+```bash
+classroom-repos pair-init
+classroom-repos pair-init --pair dsa1-proj-password-manager --apply
+```
+
 Dry-run a forward update from solution repos to provided repos:
 
 ```bash
@@ -155,6 +164,38 @@ the provided repo back into the solution repo:
 classroom-repos pair-update --pair dsa1-proj-password-manager --backward --apply
 ```
 
+Pair status gives a compact one-line summary per pair:
+
+```bash
+classroom-repos pair-status
+```
+
+## Batch operations
+
+Show Git status across discovered repositories:
+
+```bash
+classroom-repos git-status
+classroom-repos git-status --scope solution
+```
+
+Commit all changes in selected repositories:
+
+```bash
+classroom-repos git-commit --scope provided --message "Sync starter files"
+```
+
+Run a command across repositories. This is a dry run unless `--apply` is used:
+
+```bash
+classroom-repos run -- make test-all
+classroom-repos run --scope solution --apply -- make test-all
+classroom-repos run --scope pair --pair dsa1-proj-password-manager --apply -- make test-mem
+```
+
+Supported scopes are `all`, `provided`, `solution`, and `pair`. Use `--repo` to
+target one explicit repository path.
+
 ## Commands
 
 ```bash
@@ -167,9 +208,15 @@ classroom-repos update --apply
 classroom-repos update --repo /path/to/repo --apply
 classroom-repos pair-check
 classroom-repos pair-check --json
+classroom-repos pair-init
+classroom-repos pair-init --apply
 classroom-repos pair-update
 classroom-repos pair-update --apply
 classroom-repos pair-create --solution /path/to/repo-solution --apply
+classroom-repos pair-status
+classroom-repos git-status
+classroom-repos git-commit --message "Message"
+classroom-repos run --apply -- make test-all
 ```
 
 `update` is a dry run unless `--apply` is supplied. Repositories with
