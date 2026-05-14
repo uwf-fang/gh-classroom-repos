@@ -72,3 +72,25 @@ similar_files:
 
     assert config.managed_files == (".gitignore",)
     assert [rule.path for rule in config.checked_files] == ["README.md"]
+
+
+def test_load_config_parses_pair_sync(tmp_path: Path) -> None:
+    config_path = tmp_path / "classroom-repos.yml"
+    config_path.write_text(
+        """
+managed_files:
+  - .gitignore
+pair_sync:
+  solution_suffix: "-solution"
+  marker_file: ".classroom-repos-sync.json"
+  paths:
+    - README.md
+    - test/**
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path, default_repo_root=tmp_path)
+
+    assert config.pair_sync is not None
+    assert config.pair_sync.paths == ("README.md", "test/**")

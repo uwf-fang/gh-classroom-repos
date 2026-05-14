@@ -45,4 +45,17 @@ checked_files:
     kind: directory
     required_globs:
       - "*.cpp"
+
+# Pair sync checks whether provided repositories are up to date with their
+# solution repositories. A pair such as project and project-solution is inferred
+# from the suffix below. Only these paths are copied during pair-update or
+# pair-create, which helps avoid leaking solution-only files.
+pair_sync:
+  solution_suffix: "-solution"
+  marker_file: ".classroom-repos-sync.json"
+  paths:
+    - README.md
+    - Makefile
+    - .github/classroom/autograding.json
+    - test/**
 """
